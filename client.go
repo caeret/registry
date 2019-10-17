@@ -110,10 +110,10 @@ func (c *Client) Clean(keepTags ...string) error {
 	}
 	m := make(map[string][]struct{ repo, tag string })
 	for _, repo := range repos {
-		fmt.Println("repo", repo)
+		logger := c.New("repo", repo)
 		tags, err := c.QueryTags(repo)
 		if err != nil {
-			c.Logger.Warn("fail to query tags.", "repo", repo)
+			logger.Warn("fail to query tags.", "repo", repo)
 			continue
 		}
 		for _, tag := range tags {
@@ -121,17 +121,24 @@ func (c *Client) Clean(keepTags ...string) error {
 		}
 	}
 
-	keep := make(map[string]struct{})
+	var regs []*regexp.Regexp
 	for _, tag := range keepTags {
-		keep[tag] = struct{}{}
+		reg, err := regexp.Compile(tag)
+		if err != nil {
+			return err
+		}
+		regs = append(regs, reg)
 	}
 
 	for _, v := range m {
 		var del = true
+	outer:
 		for _, e := range v {
-			_, ok := keep[e.tag]
-			if ok {
-				del = false
+			for _, reg := range regs {
+				if reg.MatchString(e.tag) {
+					del = false
+					break outer
+				}
 			}
 		}
 		if del {
